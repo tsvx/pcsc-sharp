@@ -13,7 +13,6 @@ namespace Transmit
                 var readerNames = context.GetReaders();
                 if (readerNames == null || readerNames.Length < 1) {
                     Console.WriteLine("You need at least one reader in order to run this example.");
-                    Console.ReadKey();
                     return;
                 }
 
@@ -24,7 +23,7 @@ namespace Transmit
 
                 using (var rfidReader = new SCardReader(context)) {
 
-                    var sc = rfidReader.Connect(readerName, SCardShareMode.Shared, SCardProtocol.Any);
+                    var sc = rfidReader.Connect(readerName, SCardShareMode.Shared, SCardProtocol.T1);
                     if (sc != SCardError.Success) {
                         Console.WriteLine("Could not connect to reader {0}:\n{1}",
                             readerName,
@@ -41,25 +40,25 @@ namespace Transmit
                         Le = 0  // We don't know the ID tag size
                     };
 
-                    sc = rfidReader.BeginTransaction();
-                    if (sc != SCardError.Success) {
-                        Console.WriteLine("Could not begin transaction.");
-                        Console.ReadKey();
-                        return;
-                    }
+                    //sc = rfidReader.BeginTransaction();
+                    //if (sc != SCardError.Success) {
+                    //    Console.WriteLine("Could not begin transaction.");
+                    //    Console.ReadKey();
+                    //    return;
+                    //}
 
                     Console.WriteLine("Retrieving the UID .... ");
 
-                    var receivePci = new SCardPCI(); // IO returned protocol control information.
-                    var sendPci = SCardPCI.GetPci(rfidReader.ActiveProtocol);
+					var receiveBuffer = new byte[257];
+					var command = apdu.ToArray();
 
-                    var receiveBuffer = new byte[256];
-                    var command = apdu.ToArray();
+/*
+					var sendPci = SCardPCI.GetPci(rfidReader.ActiveProtocol);
 
                     sc = rfidReader.Transmit(
                         sendPci,            // Protocol Control Information (T0, T1 or Raw)
                         command,            // command APDU
-                        receivePci,         // returning Protocol Control Information
+                        null,         // returning Protocol Control Information
                         ref receiveBuffer); // data buffer
 
                     if (sc != SCardError.Success) {
@@ -67,15 +66,26 @@ namespace Transmit
                     }
 
                     var responseApdu = new ResponseApdu(receiveBuffer, IsoCase.Case2Short, rfidReader.ActiveProtocol);
-                    Console.Write("SW1: {0:X2}, SW2: {1:X2}\nUid: {2}", 
-                        responseApdu.SW1, 
-                        responseApdu.SW2, 
-                        responseApdu.HasData ? BitConverter.ToString(responseApdu.GetData()) : "No uid received");
 
-                    rfidReader.EndTransaction(SCardReaderDisposition.Leave);
+*/
+
+					int nr = receiveBuffer.Length;
+					sc = rfidReader.Transmit(command, receiveBuffer, ref nr);
+
+					if (sc != SCardError.Success)
+					{
+						Console.WriteLine("Error: " + SCardHelper.StringifyError(sc));
+					}
+
+					var responseApdu = new ResponseApdu(receiveBuffer, nr, IsoCase.Case2Short, rfidReader.ActiveProtocol);
+
+/**/
+
+					Console.WriteLine("SW1: {0:X2}, SW2: {1:X2}", responseApdu.SW1, responseApdu.SW2);
+					Console.WriteLine("UID: {0}", responseApdu.HasData ? BitConverter.ToString(responseApdu.GetData()) : "No uid received");
+
+                    //rfidReader.EndTransaction(SCardReaderDisposition.Leave);
                     rfidReader.Disconnect(SCardReaderDisposition.Reset);
-
-                    Console.ReadKey();
                 }
             }
         }
@@ -86,8 +96,14 @@ namespace Transmit
             for (var i = 0; i < readerNames.Length; i++) {
                 Console.WriteLine("[" + i + "] " + readerNames[i]);
             }
-            
-            // Ask the user which one to choose.
+
+			if (readerNames.Length == 1)
+			{
+				Console.WriteLine("Using reader #0");
+				return readerNames[0];
+			}
+			
+			// Ask the user which one to choose.
             Console.Write("Which reader is an RFID reader? ");
             var line = Console.ReadLine();
             int choice;
